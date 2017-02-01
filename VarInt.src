@@ -1,0 +1,403 @@
+/**
+ * Databaseline code repository
+ *
+ * Code for post: Variational Integration
+ * Compatibility: Maple 11 and above
+ * Base URL:      https://databaseline.bitbucket.io
+ * Post URL:      http://wp.me/p4zRKC-2O
+ * Author:        Ian Hellström
+ *
+ * Notes:         VarInt Release 6
+ */
+
+VarInt:=module()
+    option package,`Copyright (c) 2010-2014 by Ian Hellstrom`;
+    description "Variational Integrator Design with Maple";
+    local linkSort,condSolve,computePQ,dEulerLagrange,extractWeight,extractParts,trapeziumRule;
+    export ModuleApply,ExtractAlgorithm,IntegrateSystem,CreateVarInt;
+
+    linkSort:=proc(L::list,M::list)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "sort a list algebraically in non-descending order "
+                    "and sort a linked list with its permutation cycle";
+        local k,Map;
+
+        Map:=map(attributes,sort(([seq])(setattribute(evalf(L[k]),[L[k],M[k]]),k=1..nops(L)),`<`)):
+
+        return [seq(op(1,op(k,Map)),k=1..nops(Map))],
+               [seq(op(2,op(k,Map)),k=1..nops(Map))];
+    end proc:
+
+    condSolve:=proc(Eqn::equation,Var::name,Val::posint,Con::posint)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "solve an equation algebraically or numerically";
+
+        if Val<=Con then
+            return solve(Eqn,Var);
+        else
+            return fsolve(Eqn,Var,fulldigits);
+        end if:
+    end proc:
+
+    computePQ:=proc(tList::list,p::symbol,q::symbol,h::symbol,Interp::expects(procedure):=interp)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "extrapolate and substitute interval boundaries";
+        local k,n,s,t,Q,qList,DQ,DqList,iQ;
+
+        n:=nops(tList):
+        iQ:=t->subs(s=t,factor(Interp(tList,[seq(q[k],k=1..n)],s))):
+        Q:=subs({seq(q[k]=q[k-1],k=1..n),q[n+1]=q[n-1]},
+             factor(subs(solve({q[0]=iQ(0),q[n+1]=iQ(h)},{q[1],q[n]}),iQ(t)))):
+        DQ:=factor(diff(Q,t)):
+        qList:=[seq(simplify(subs(t=tList[k],Q)),k=1..n)]:
+        DqList:=[seq(simplify(subs(t=tList[k],DQ)),k=1..n)]:
+
+        qList,DqList;
+    end proc:
+
+    dEulerLagrange:=proc(n::posint,dS::anything,dF::list,p::symbol,q::symbol)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "calculate the discrete Euler-Lagrange equations";
+        local dEL;
+
+        dEL[1]:=p[0]=-convert(diff(dS,q[0]),D)-dF[1]:
+        seq(assign(dEL[k+1],0=convert(diff(dS,q[k]),D))+dF[k+1],k=1..n-2):
+        dEL[n]:=p[n-1]=convert(diff(dS,q[n-1]),D)+dF[n]:
+
+        return [seq(expand(simplify(dEL[k])),k=1..n)];
+    end proc:
+
+    trapeziumRule:=proc(n::posint,L::symbol,p::symbol,q::symbol,h::symbol)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "approximate an action with the trapezium rule";
+        local k,tList,qList,DqList,dS;
+
+        tList:=[seq(k*h/(n-1),k=0..n-1)]:
+        qList,DqList:=computePQ(tList,p,q,h):
+        dS:=expand(h/(2*(n-1))*(L(qList[1],DqList[1])+
+                                L(qList[n],DqList[n])+
+                         2*(add(L(qList[k],DqList[k]),k=2..n-1))));
+    end proc:
+
+
+    extractWeight:=proc(Expr::anything,Fun::symbol,Var::name)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "extract a weight from a quadrature formula";
+        local Term;
+
+        Term:=indets(Expr,And(specfunc(anything,Fun),patfunc(identical(Var),anything))):
+
+        if Term = {} then
+            return 0;
+        elif nops(Term) = 1 then
+            return coeff(Expr,Term[]);
+        else
+            error("VarInt: extractWeight -- more than one term in the quadrature "
+                  "formula matches the variable %1",Fun(Var,anything));
+        end if:
+    end proc:
+
+
+    extractParts:=proc(n::posint,Expr::anything,Fun::symbol,Var::name)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "extract equal-time portions from a quadrature formula";
+        local i,j,Terms;
+
+        Terms:=[seq([indets(Expr,And(specfunc(anything,Fun),
+                patfunc(identical(Var[i]),anything)))[]],i=0..n-1)]:
+
+        if Terms = [] then
+            return 0;
+        else
+            return [seq(expand(add(coeff(Expr,op(j,op(i,Terms)))*op(j,op(i,Terms)),
+                               j=1..nops(op(i,Terms)))),i=1..nops(Terms))];
+        end if:
+    end proc:
+
+    IntegrateSystem:=module()
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "numerically integrate with a variational integrator";
+        local pList,qList,tList,eList,stepMap;
+        export ModuleApply;
+
+        stepMap:=proc(iPQ::list,nPQ::list,dMap::set)
+            local k,n,tempP,tempQ;
+
+            n:=nops(dMap)-1:
+            assign(fsolve(subs({tempP[0]=op(1,iPQ),
+                                tempQ[0]=op(2,iPQ)},
+                                subs({nPQ[1]=tempP,nPQ[2]=tempQ},dMap)),
+                                {tempP[n],seq(tempQ[k],k=1..n)},fulldigits));
+
+            return tempP[n],tempQ[n];
+        end proc:
+
+        ModuleApply:=proc(DEL::list,namePQ::list,initPQ::list,tSpan::list,tStep::equation,E::procedure)
+            local k,N,initE,dEL,dELstep;
+
+            N:=ceil((op(2,tSpan)-op(1,tSpan))/rhs(tStep)):
+            pList:=table([0=op(1,initPQ)]):
+            qList:=table([0=op(2,initPQ)]):
+            initE:=E(op(1,initPQ),op(2,initPQ)):
+            eList:=table([0=initE]):
+            tList:=[seq(op(1,tSpan)+k*rhs(tStep),k=0..N)]:
+            dEL:={seq(DEL[k],k=1..nops(DEL))}:
+            dELstep:=subs(tStep,dEL):
+
+            for k to N do
+                pList[k],qList[k]:=stepMap([pList[k-1],qList[k-1]],namePQ,dELstep):
+                eList[k]:=E(pList[k],qList[k]):
+            end do:
+
+            return tList,[seq(pList[k],k=0..N)],
+                         [seq(qList[k],k=0..N)],
+                         [seq(eList[k],k=0..N)]:
+        end proc:
+    end module:
+
+    ExtractAlgorithm:=module()
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "extract the one-step map from the discrete Euler-Lagrange equations "
+                    "for separable Lagrangians";
+        local i,k,n,dSum,extAlg,mCurry,extractVar,plugEqn,recSub;
+        export ModuleApply;
+
+        mCurry:=proc(p)
+            description "modified curry procedure";
+
+            subs(['_p'=p,'_pX'=_rest],()->_p(_pX,args));
+        end proc:
+
+        extractVar:=proc(Eqn::equation,Var::name,VFun::symbol,FFun::anything)
+            description "extract variable from (implicit) equation";
+            local lhsVFun,lhsFFun,lhsCoeff,tmpEqn;
+
+            tmpEqn:=expand(isolate(Eqn,Var)):
+            lhsVFun:=select(has,lhs(tmpEqn),VFun):
+            if lhsVFun=NULL then
+                lhsVFun:=0:
+            end if:
+            if FFun=0 then
+                lhsFFun:=0:
+            else
+                lhsFFun:=select(has,lhs(tmpEqn),FFun):
+                if lhsFFun=NULL then
+                    lhsFFun:=0:
+                end if:
+            end if:
+
+            lhsCoeff:=frontend(coeff,[lhs(tmpEqn),Var]):
+            return expand(simplify((tmpEqn-lhsVFun-lhsFFun)/lhsCoeff));
+        end proc:
+
+        plugEqn:=proc(Expr::equation,Eqns)
+            description "substitute an equation into the rhs of an expression";
+
+            lhs(Expr)=expand(simplify(frontend(mCurry(subs,{Eqns}),[rhs(Expr)])));
+        end proc:
+
+        recSub:=proc(Expr::equation,Eqns)
+            description "substitute a sequence of equations recursively";
+            local n;
+
+            n:=nops(Eqns);
+            if n = 1 then
+                return plugEqn(Expr,Eqns[n]);
+            else
+                return recSub(plugEqn(Expr,Eqns[n]),Eqns[1..n-1]);
+            end if:
+        end proc:
+
+        ModuleApply:=proc(dEL::list,p::symbol,q::symbol,V::symbol,F::anything:=0)
+            n:=nops(dEL):
+            extAlg[n]:=expand(add(dEL[k],k=2..n)-dEL[1]+p[0]):
+            extAlg[n-1]:=extractVar(dEL[n-1],q[n-1],V,F):
+
+            if n=3 then
+                extAlg[n-2]:=extractVar(plugEqn(dEL[n-2],extAlg[n-1]),q[n-2],V,F):
+            elif n>=4 then
+                dSum:=[seq(add(dEL[k],k=1..i),i=1..n-2)]:
+
+                for i from n-2 by -1 to 1 do
+                    extAlg[i]:=extractVar(recSub(dSum[i],[seq(extAlg[k],k=i+1..n-1)]),q[i],V,F):
+                end do:
+            end if:
+
+            for i from 2 by 1 to n do
+                extAlg[i]:=recSub(extAlg[i],[seq(extAlg[k],k=1..i-1)]):
+            end do:
+
+            [seq(extAlg[k], k = 1 .. n)];
+        end proc:
+    end module:
+
+    CreateVarInt:=module()
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "create variational integrators based on user-defined "
+                    "nodes, weights and the interpolation function";
+        local a,b,k,n,t,minL,maxL,nLst,wLst,tList,qList,DqList,dS,dF,preMult;
+        export ModuleApply;
+
+        ModuleApply:=proc(r::range,nList::list,wList::list,
+                          L::symbol,F::anything,p::symbol,q::symbol,h::symbol,
+                          iProc::expects(procedure):=interp)
+            a:=op(1,r):
+            b:=op(2,r):
+            n:=nops(nList):
+
+            minL:=evalf(min(nList[])):
+            maxL:=evalf(max(nList[])):
+
+
+            if minL < a and maxL > b then
+                error("VarInt: CreateVarInt -- node list out of bounds");
+            elif minL < a then
+                error("VarInt: CreateVarInt -- lowest node (%1) lies below "
+                      "the specified lower bound (%2)",minL,a);
+            elif maxL > b then
+                error("VarInt: CreateVarInt -- highest node (%1) exceeds "
+                      "the specified upper bound (%2)",maxL,b);
+            end if:
+
+            if not n = nops(wList) then
+                error("VarInt: CreateVarInt -- number of elements in the node list "
+                      "(%1) does not match the number of elements in the weight "
+                      "list (%2)",n,nops(wList));
+            end if:
+
+	        nLst,wLst:=linkSort(nList,wList):
+            tList:=[seq(h/(2*(a-b))*(a+b-2*nLst[k])+h/2,k=1..n)]:
+            qList,DqList:=computePQ(tList,p,q,h,iProc):
+            dS:=h/2*expand(add(wLst[k]*L(qList[k],DqList[k]),k=1..n)):
+            dF:=[seq(expand(h/2*add(wLst[k]*F(qList[k],DqList[k])*
+                 factor(diff(qList[k],q[l-1])),k=1..n)),l=1..n)]:
+
+            dEulerLagrange(n,dS,dF,p,q,h);
+        end proc:
+    end module:
+
+    ModuleApply:=proc(n::posint,L::symbol,F::anything,Quad::name,p::symbol,q::symbol,h::symbol)
+        option `Copyright (c) 2010-2014 by Ian Hellstrom`;
+        description "compute a variational integrator based on built-in quadrature rules";
+        local i,j,k,l,m,s,t,x,y,z,nList,tList,wList,qList,DqList,
+              dS,dF,Method,preMult,cF,cG,tempL,rTab,delta,theta;
+
+        Method:={NewtonCotes,Romberg,Chebyshev,GaussLegendre,
+                 GaussLobatto,Fejer1,Fejer2,Fejer3,Fejer4,ClenshawCurtis,TakahasiMori};
+
+        if not Quad in Method then
+            error("VarInt -- quadrature formula %1 invalid",Quad);
+        end if:
+
+        if Quad in Method and n<2 then
+            error("VarInt -- number of nodes for %1 must be at "
+                  "least 2",Quad);
+        end if:
+
+        if Quad=Romberg and not type(log(n-1)/log(2),nonnegint) then
+            error("VarInt -- number of nodes for %1 must be 2, 3, 5, "
+                  "9, 17, 33, ... = 1 + 2^N, with N an integer",Quad);
+        end if:
+
+        if Quad=TakahasiMori and ( n<3 or type(n,even) ) then
+            error("VarInt -- number of nodes for %1 must be an odd "
+                  "integer greater than or equal to 3",Quad);
+            return;
+        end if:
+
+        if Quad in Method minus {NewtonCotes,Romberg} then
+            if Quad=GaussLegendre then
+                nList:=[condSolve(orthopoly[P](n,t)=0,t,n,4)]:
+                wList:=[seq(2/((1-nList[k]^2)*
+                        subs(s=nList[k],diff(orthopoly[P](n,s),s))^2),k=1..n)]:
+                preMult:=1:
+            elif Quad=GaussLobatto then
+                nList:=[-1,condSolve(diff(orthopoly[P](n-1,t),t)=0,t,n,4),1]:
+                wList:=[2/(n*(n-1)),
+                        seq(2/(n*(n-1)*orthopoly[P](n-1,nList[k])^2),k=2..n-1),
+                        2/(n*(n-1))]:
+                preMult:=1:
+            elif Quad=Fejer1 then
+                theta:=k->(2*k-1)*Pi/(2*n):
+                nList:=[seq(cos(theta(k)),k=1..n)]:
+                wList:=[seq(2/n*(1-2*add(cos(2*l*theta(k))/(4*l^2-1),l=1..floor(n/2))),k=1..n)]:
+                preMult:=1:
+            elif Quad=Fejer2 then
+                theta:=k->k*Pi/(n+1):
+                nList:=[seq(cos(theta(k)),k=1..n)]:
+                wList:=[seq(4*sin(theta(k))/(n+1)*
+                        add(sin((2*l-1)*theta(k))/(2*l-1),l=1..floor(n/2+1/2)),k=1..n)]:
+                preMult:=1:
+            elif Quad=Fejer3 then
+                theta:=k->(2*k-1)*Pi/(2*n+1):
+                nList:=[seq(cos(theta(k)),k=1..n)]:
+                wList:=[seq(4*sin(theta(k))/(n+1/2)*
+                        add(sin((2*l-1)*theta(k))/(2*l-1),l=1..floor(n/2+1/2)),k=1..n)]:
+                preMult:=1:
+            elif Quad=Fejer4 then
+                theta:=k->2*k*Pi/(2*n+1):
+                nList:=[seq(cos(theta(k)),k=1..n)]:
+                wList:=[seq(4*sin(theta(k))/(n+1/2)*
+                        add(sin((2*l-1)*theta(k))/(2*l-1),l=1..floor(n/2+1/2)),k=1..n)]:
+                preMult:=1:
+            elif Quad=ClenshawCurtis then
+                delta:=(i,j)->table(symmetric,identity)[i,j]:
+                theta:=k->k*Pi/(n-1):
+                nList:=[seq(cos(theta(k)),k=0..n-1)]:
+                wList:=[seq((2-delta(0,`mod`(k,n-1)))*
+                        (1-2*(add(cos(2*l*theta(k))*(1-1/2*delta(l,floor((1/2)*n-1/2)))/(4*l^2-1),
+                        l=1..floor(n/2-1/2))))/(n-1),k=0..n-1)]:
+                preMult:=1:
+            elif Quad=Chebyshev then
+                cF:=(l,z)->convert(series(exp(l/2*(-2+ln(1-z)*(1-1/z)+ln(1+z)*(1+1/z))),z=0,l+2),polynom):
+                cG:=(m,x)->factor(subs(y=1/x,x^m*cF(m,y))):
+                nList:=[condSolve(cG(n,t)=0,t,n,3)]:
+                wList:=[seq(1/n,k=1..n)]:
+                preMult:=1:
+            elif Quad=TakahasiMori then
+                m:=n/2-1/2:
+                l:=evalf(2*ln(Pi*n)/n):
+                nList:=[seq(evalf(tanh(Pi/2*sinh(k*l))),k=-m.. m)]:
+                wList:=[seq(evalf(Pi/2*cosh(k*l)/cosh(Pi/2*sinh(k*l))^2),k=-m..m)]:
+                preMult:=l:
+            end if:
+
+            nList,wList:=linkSort(nList,wList):
+            tList:=[seq(h/2*nList[k]+h/2,k=1..n)]:
+            qList,DqList:=computePQ(tList,p,q,h):
+            dS:=h/2*expand(add(wList[k]*preMult*L(qList[k],DqList[k]),k=1..n)):
+            dF:=[seq(expand(h/2*add(wList[k]*preMult*F(qList[k],DqList[k])*
+                 factor(diff(qList[k],q[l-1])),k=1..n)),l=1..n)]:
+
+        elif Quad=NewtonCotes then
+            tList:=[seq(k*h/(n-1),k=0..n-1)]:
+            qList,DqList:=computePQ(tList,p,q,h):
+            dS:=expand(int(interp(tList,[seq(tempL(qList[k],DqList[k]),k=1..n)],t),t=0..h)):
+            wList:=[seq(extractWeight(dS,tempL,q[k]),k=0..n-1)]:
+            dS:=expand(eval(dS,tempL=L)):
+            dF:=[seq(expand(wList[k]*F(qList[k],DqList[k])),k=1..n)]:
+        elif Quad=Romberg then
+	    tList:=[seq(k*h/(n-1),k=0..n-1)]:
+            qList,DqList:=computePQ(tList,p,q,h):
+
+            m:=log(n-1)/log(2):
+
+            for i from 0 to m do
+                rTab[0,i]:=subs({seq(q[k]=q[k*2^(m-i)],k=1..2^i)},
+                                trapeziumRule(1+2^i,tempL,p,q,h)):
+            end do:
+
+            for j to m do
+                for i from j to m do
+                    rTab[j,i]:=(4^j*rTab[j-1,i]-rTab[j-1,i-1])/(4^j-1):
+                end do:
+            end do:
+
+            dS:=expand(eval(rTab[m,m],tempL=L)):
+            dF:=eval(extractParts(n,rTab[m,m],tempL,q),tempL=F):
+        end if:
+
+        return dEulerLagrange(n,dS,dF,p,q,h);
+
+    end proc:
+end module:
