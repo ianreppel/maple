@@ -1,20 +1,20 @@
 /**
  * Code for post: Variational Integration
  * Compatibility: Maple 11 and above
- * Base URL:      https://ianhellstrom.org
- * Author:        Ian Hellström
+ * Base URL:      https://ianreppel.org
+ * Author:        Ian Reppel
  *
  * Notes:         VarInt Release 6
  */
 
 VarInt:=module()
-    option package,`Copyright (c) 2010-2023 by Ian Hellstrom`;
+    option package,`Copyright (c) 2010-2025 by Ian Reppel`;
     description "Variational Integrator Design with Maple";
     local linkSort,condSolve,computePQ,dEulerLagrange,extractWeight,extractParts,trapeziumRule;
     export ModuleApply,ExtractAlgorithm,IntegrateSystem,CreateVarInt;
 
     linkSort:=proc(L::list,M::list)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "sort a list algebraically in non-descending order "
                     "and sort a linked list with its permutation cycle";
         local k,Map;
@@ -26,7 +26,7 @@ VarInt:=module()
     end proc:
 
     condSolve:=proc(Eqn::equation,Var::name,Val::posint,Con::posint)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "solve an equation algebraically or numerically";
 
         if Val<=Con then
@@ -37,7 +37,7 @@ VarInt:=module()
     end proc:
 
     computePQ:=proc(tList::list,p::symbol,q::symbol,h::symbol,Interp::expects(procedure):=interp)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "extrapolate and substitute interval boundaries";
         local k,n,s,t,Q,qList,DQ,DqList,iQ;
 
@@ -53,7 +53,7 @@ VarInt:=module()
     end proc:
 
     dEulerLagrange:=proc(n::posint,dS::anything,dF::list,p::symbol,q::symbol)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "calculate the discrete Euler-Lagrange equations";
         local dEL;
 
@@ -65,7 +65,7 @@ VarInt:=module()
     end proc:
 
     trapeziumRule:=proc(n::posint,L::symbol,p::symbol,q::symbol,h::symbol)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "approximate an action with the trapezium rule";
         local k,tList,qList,DqList,dS;
 
@@ -78,7 +78,7 @@ VarInt:=module()
 
 
     extractWeight:=proc(Expr::anything,Fun::symbol,Var::name)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "extract a weight from a quadrature formula";
         local Term;
 
@@ -96,7 +96,7 @@ VarInt:=module()
 
 
     extractParts:=proc(n::posint,Expr::anything,Fun::symbol,Var::name)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "extract equal-time portions from a quadrature formula";
         local i,j,Terms;
 
@@ -112,7 +112,7 @@ VarInt:=module()
     end proc:
 
     IntegrateSystem:=module()
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "numerically integrate with a variational integrator";
         local pList,qList,tList,eList,stepMap;
         export ModuleApply;
@@ -153,7 +153,7 @@ VarInt:=module()
     end module:
 
     ExtractAlgorithm:=module()
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "extract the one-step map from the discrete Euler-Lagrange equations "
                     "for separable Lagrangians";
         local i,k,n,dSum,extAlg,mCurry,extractVar,plugEqn,recSub;
@@ -229,7 +229,7 @@ VarInt:=module()
     end module:
 
     CreateVarInt:=module()
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "create variational integrators based on user-defined "
                     "nodes, weights and the interpolation function";
         local a,b,k,n,t,minL,maxL,nLst,wLst,tList,qList,DqList,dS,dF,preMult;
@@ -274,7 +274,7 @@ VarInt:=module()
     end module:
 
     ModuleApply:=proc(n::posint,L::symbol,F::anything,Quad::name,p::symbol,q::symbol,h::symbol)
-        option `Copyright (c) 2010-2023 by Ian Hellstrom`;
+        option `Copyright (c) 2010-2025 by Ian Reppel`;
         description "compute a variational integrator based on built-in quadrature rules";
         local i,j,k,l,m,s,t,x,y,z,nList,tList,wList,qList,DqList,
               dS,dF,Method,preMult,cF,cG,tempL,rTab,delta,theta;
